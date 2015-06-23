@@ -1,0 +1,311 @@
+#include <assert.h>
+#include <errno.h>
+#include <getopt.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "complex-type.h"
+#include <fftw3-mpi.h>
+#include "fp.h"
+#include "distribution.h"
+
+const char *description = 
+    "TEST: FFTW guru interface.\n"
+    "\n"
+    "A simple example of the FFTW guru interface for a serial 3d FFT\n"
+    "\n";
+
+bool do_check = true;
+bool do_print = false;
+
+double pi = 3.141592653589793238462643;
+
+#define double(X) ((double)(X))
+#define cprintf(expr, ...) if (expr) { fprintf(stderr, __VA_ARGS__); }
+
+///
+// Floating point comparison based on number of 
+// A tolerance of 1 corresponds to a relative difference of 1 part
+// in 2^53 ~ 10^-16.
+///
+static inline bool isclose(complex_t a, complex_t b)
+{
+    int tolerance = 20;
+    return fp_complex_isclose(a, b, tolerance);
+}
+
+
+// print a distributed array by process
+void print_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    for (int p0 = 0; p0 < nproc[0]; ++p0) {
+        for (int p1 = 0; p1 < nproc[1]; ++p1) {
+            for (int p2 = 0; p2 < nproc[2]; ++p2) {
+                if (p0 == self[0] && p1 == self[1] && p2 == self[2]) {
+                    // Cartesian iteration over local data array
+                    int64_t local_index = 0;
+                    fprintf(stderr, "p = %d, %d, %d\n", p0, p1, p2);
+                    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+                        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+                            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                                fprintf(stderr, "(%f, %f) ", real(a[local_index]), imag(a[local_index]));
+                                ++local_index;
+                            }
+                            fprintf(stderr, "\n");
+                        }
+                        fprintf(stderr, "\n");
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// A delta function
+void assign_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                a[local_index] = 0.0;
+                ++local_index;
+            }
+        }
+    }
+    if (0 == self[0] && 0 == self[1] && 0 == self[2]) {
+        a[0] = 1.0;
+    }
+}
+
+
+// local 3d transform
+void fft(int sign, complex_t *a, complex_t *b, int n[], int nproc[], int self[])
+{
+    fftw_iodim iodim[3];
+    fftw_plan plan;
+    int flags;
+
+    for (int i = 0, stride = 1; i < 3; ++i) {
+        iodim[i].n = (n[i] / nproc[i]);
+        iodim[i].is = stride;
+        iodim[i].os = stride;
+        stride *= (n[i] / nproc[i]);
+    }
+
+    flags = FFTW_ESTIMATE;
+    plan = fftw_plan_guru_dft(3, iodim, 0, NULL, a, b, sign, flags);
+    fftw_execute(plan);
+    for (int dim = 0; dim < 3; ++dim) {
+        for (int p = 0; p < nproc[dim]; ++p) {
+            int peer_send = (self[dim] + nproc[dim] - p) % nproc[dim];
+            int peer_recv = (self[dim] + p) % nproc[dim];
+            complex_t phase = cexp( -2 * pi * I * double(p) / double(n[dim] / nproc[dim]));
+            MPI_Sendrecv(b, local_size, MPI_DOUBLE_COMPLEX, peer_send, 0,
+                         a, local_size, MPI_DOUBLE_COMPLEX, peer_recv, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            for (int i = 0; i < local_size; ++i) {
+                a[i] += b[i] * phase;
+            }
+        }
+    }
+    fftw_destroy_plan(plan);
+}
+
+
+// check that each local array element has the value of its global
+// index in the given data distribution
+void check_array_is_delta_function(double scale, complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                if (local_index == 0 && 0 == self[0] && 0 == self[1] && 0 == self[2]) {
+                    if (!isclose(a[local_index], scale)) {
+                        fprintf(stderr,
+                                "data[%d, %d, %d] = (%f, %f) -- should be (%f, 0.0)\n",
+                                j0, j1, j2,
+                                real(a[local_index]),
+                                imag(a[local_index]),
+                                scale);
+                    }
+                } else {
+                    if (!isclose(a[local_index], 0.0)) {
+                        fprintf(stderr,
+                                "data[%d, %d, %d] = (%f, %f) -- should be (0.0, 0.0)\n",
+                                j0, j1, j2,
+                                real(a[local_index]),
+                                imag(a[local_index]));
+                    }
+                }
+                ++local_index;
+            }
+        }
+    }
+}
+
+
+// check that each local array element has the value of its global
+// index in the given data distribution
+void check_array_is_constant(double value, complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                if (!isclose(a[local_index], value)) {
+                    fprintf(stderr,
+                            "data[%d, %d, %d] = (%f, %f) -- should be (%f, 0.0)\n",
+                            j0, j1, j2,
+                            real(a[local_index]),
+                            imag(a[local_index]),
+                            value);
+                    }
+                }
+                ++local_index;
+        }
+    }
+}
+
+
+void usage(const char *name, int self)
+{
+    cprintf(self == 0, "Usage: %s [-n <grid size>]\n", name);
+    cprintf(self == 0, description);
+}
+
+
+int transpose(int m, int p, double *a, double *b)
+{
+    return 0;
+}
+
+
+int main(int argc, char *argv[])
+{
+    MPI_Comm comm;
+    int n[3] = { 8, 8, 8 };
+    int padding[3] = { 0, 0, 0};
+    int nproc;
+    int self;
+    complex_t *a;
+    complex_t *b;
+    complex_t *c;
+    distribution_t d[1];     // distribution descriptor
+    size_t local_size;
+    extern int errno;
+
+    // MPI initalization
+    MPI_Init(&argc, &argv);
+    MPI_Comm_dup(MPI_COMM_WORLD, &comm);
+    MPI_Comm_rank(comm, &self);
+    MPI_Comm_size(comm, &nproc);
+
+    // process arguments
+    for (int c = 0; c != -1; c = getopt(argc, argv, "hn:")) {
+        errno = 0;
+        if (c == 'n') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                cprintf(self == 0, "%s: %s: %s\n",
+                        argv[0], optarg, strerror(errno));
+            }
+            n[0] = n[1] = n[2] = (int) value;
+        } else if (c == 'h') {
+            usage(argv[0], self);
+            exit(0);
+        } else if (c == 0) {
+            continue;
+        } else {
+            exit(1);
+        }
+    }
+    argc -= optind;
+    argv += optind;
+    cprintf(self == 0, description);
+    fprintf(stderr,
+            "Array dimensions: %d X %d X %d\n",
+            n[0], n[1], n[2]);
+
+    // other initialization
+
+    distribution_init(comm, n, padding, d, true);
+    distribution_assert_commensurate(d);
+
+    local_size = 1;
+    for (int dim = 0; dim < 3; ++dim) {
+        local_size *= d->process_topology_3.n[dim];
+    }
+
+    a = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!a) {
+        perror("malloc");
+    }
+    b = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!b) {
+        perror("malloc");
+    }
+    c = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!b) {
+        perror("malloc");
+    }
+
+    // initialize 
+    assign_array(a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+    if (do_check) {
+        cprintf(self == 0, "Checking initial data...\n");
+        if (do_print) {
+            print_array(a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        }
+        check_array_is_delta_function(1.0, a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        cprintf(self == 0, "Checking initial data...done\n");
+    }
+    
+    // compute forward transform
+    fft(FFTW_FORWARD, a, b, n, d->process_topology_1.nproc, d->process_topology_1.self);
+    if (do_check) {
+            cprintf(self == 0, "Checking forward FFT...\n");
+            sleep(1);
+            if (do_print) {
+                print_array(b, n, d->process_topology_1.nproc, d->process_topology_1.self);
+            }
+            check_array_is_constant(1.0, b, n, d->process_topology_1.nproc, d->process_topology_1.self);
+            cprintf(self == 0, "Checking forward FFT...done\n");
+            sleep(2);
+    }
+
+    // compute backward transform
+    fft(FFTW_BACKWARD, b, a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+    if (do_check) {
+        cprintf(self == 0, "Checking backward FFT...\n");
+        sleep(1);
+        if (do_print) {
+            print_array(a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        }
+        check_array_is_delta_function(n[0] * n[1] * n[2], a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        cprintf(self == 0, "Checking backward FFT...done\n");
+        sleep(2);
+    }
+    
+    fftw_free(a);
+    fftw_free(b);
+
+    MPI_Finalize();
+
+    return 0;
+}

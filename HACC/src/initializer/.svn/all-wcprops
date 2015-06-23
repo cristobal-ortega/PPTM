@@ -1,0 +1,143 @@
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/repos/DarkUniverse/!svn/ver/448/rru2/trunk/initializer
+END
+TypesAndDefs.h
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/TypesAndDefs.h
+END
+Parallelization.h
+K 25
+svn:wc:ra_dav:version-url
+V 73
+/repos/DarkUniverse/!svn/ver/303/rru2/trunk/initializer/Parallelization.h
+END
+DataBase.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/repos/DarkUniverse/!svn/ver/303/rru2/trunk/initializer/DataBase.cpp
+END
+subSamples.dat
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/subSamples.dat
+END
+PerfMon.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/PerfMon.c
+END
+include.mk
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/repos/DarkUniverse/!svn/ver/261/rru2/trunk/initializer/include.mk
+END
+DataBase.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/repos/DarkUniverse/!svn/ver/303/rru2/trunk/initializer/DataBase.h
+END
+Basedata.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/Basedata.h
+END
+PerfMon.h
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/PerfMon.h
+END
+Cosmology.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/repos/DarkUniverse/!svn/ver/303/rru2/trunk/initializer/Cosmology.cpp
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/README
+END
+README.pope
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/README.pope
+END
+indat
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/indat
+END
+MT_Random.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/MT_Random.cpp
+END
+Cosmology.h
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/repos/DarkUniverse/!svn/ver/303/rru2/trunk/initializer/Cosmology.h
+END
+Initializer.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/repos/DarkUniverse/!svn/ver/411/rru2/trunk/initializer/Initializer.cpp
+END
+main.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/repos/DarkUniverse/!svn/ver/303/rru2/trunk/initializer/main.cpp
+END
+MT_Random.h
+K 25
+svn:wc:ra_dav:version-url
+V 67
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/MT_Random.h
+END
+init2.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/repos/DarkUniverse/!svn/ver/448/rru2/trunk/initializer/init2.cpp
+END
+Initializer.h
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/repos/DarkUniverse/!svn/ver/395/rru2/trunk/initializer/Initializer.h
+END
+cmb.tf
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/DarkUniverse/!svn/ver/245/rru2/trunk/initializer/cmb.tf
+END
+Parallelization.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/repos/DarkUniverse/!svn/ver/313/rru2/trunk/initializer/Parallelization.cpp
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/repos/DarkUniverse/!svn/ver/439/rru2/trunk/initializer/Makefile
+END

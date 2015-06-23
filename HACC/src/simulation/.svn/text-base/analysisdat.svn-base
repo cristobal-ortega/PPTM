@@ -1,0 +1,8 @@
+0.2	# linking length
+1.0e12	# minimum mass (M_solar/h)
+10	# minimum number of particles
+5.0	# overload length (Mpc/h)
+22500	# Nskewers
+4096	# Npixels
+0.325	# h (Mpc/h): pixel smoothing length
+512	# Nmesh < L/h

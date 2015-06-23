@@ -1,0 +1,39 @@
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <mpi.h>
+
+int main(int argc, char *argv[])
+{
+    void *buf;
+    int self;
+    int nproc;
+    int gigabyte = 1 << 30;
+    bool do_memset = false;
+
+    MPI_Init(0, 0);
+    MPI_Comm_rank(MPI_COMM_WORLD, &self);
+    MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+
+    buf = NULL;
+    for (int ngigabytes = 1; ngigabytes < 100; ++ngigabytes) {
+        size_t size = ngigabytes * gigabyte; 
+        buf = realloc(buf, size);
+        if (!buf) {
+            fprintf(stderr, "%d of %d: realloc failed on %d GB\n", self, nproc, ngigabytes);
+            exit(1);
+        } else {
+            fprintf(stderr, "%d of %d: realloc succeeded on %d GB\n", self, nproc, ngigabytes);
+            if (do_memset) {
+                memset(buf, 'a', size);
+                fprintf(stderr, "%d of %d: memset succeeded on %d GB\n", self, nproc, ngigabytes);
+            }
+        }
+    }
+
+    MPI_Finalize();
+
+    return 0;
+}

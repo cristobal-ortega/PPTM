@@ -1,0 +1,257 @@
+#include <assert.h>
+#include <errno.h>
+#include <getopt.h>
+#include <mpi.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <iostream>
+#include <vector>
+
+#include "solver.hpp"
+
+const char *description =
+    "\n"
+    "TEST: FFTW, 3-d data distribution, solver\n"
+    "\n"
+    "FFTW MPI transform, combined with a 1-d <--> 3-d\n"
+    "data redistribution so that it can be applied directly\n"
+    "to problems requiring a 3-d data distribution\n"
+    "\n"
+    "This test applies the FFT to solving the Poisson equation \n"
+    "  Laplacian phi = - rho\n"
+
+    "using the following k-space Green's Function:\n"
+    "  G(k1, k2, k3) = - 1 / 2 (c(k1) + c(k2) + c(k3) - 3)\n"
+    "                ~ |k|^-2, n -> oo\n"
+    "where\n"
+    "  c(k) = cos(2 pi k / n)\n"
+    "We calculate both phi and grad phi, the latter obtained using\n"
+    "the Green's function \n"
+    "  G_i(k1, k2, k3) = - i s(k_i) / 2 (c(k1) + c(k2) + c(k3) - 3)\n"
+    "                  ~ - i k_i |k|^-2, n -> oo\n"
+    "where\n"
+    "  s(k) = sin(2 pi k / n)\n"
+    "\n"
+    "Conventions:\n"
+    "  w = exp(2 pi i / N)\n"
+    "  fftw_forward(f(x), k) = Sum_x w^(-k.x) f(x),\n"
+    "  fftw_backward(f(k), x) = Sum_k w^(+k.x) f(k),\n"
+    "  f(x) = 1/n fftw_backward(fftw_forward(f(x), k), x)\n"
+    "  backward(forward(fx) = Sum_k exp(+(2 pi i/ N) k.x) f(x)\n"
+    "  gradient  = 1/2 (delta(x, x + e_i) - delta(x, x - e_i))\n"
+    "  Laplacian = Sum_i (delta(x, x + e_i) - 2 delta(x, x) + delta(x, x - e_i)\n"
+    "\n";
+
+
+///
+// Print functor for printing items via an iterator
+///
+template <typename T>
+struct PrintFunctor {
+    void operator() (T item) const { std::cout << item << " "; }
+};
+
+
+///
+// A delta function
+///
+void assign_array(std::vector<complex_t> & a, int const n[], int const nproc[], int const self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                a[local_index] = 0.0;
+                ++local_index;
+            }
+        }
+    }
+    if (0 == self[0] && 0 == self[1] && 0 == self[2]) {
+        a[0] = 1.0;
+    }
+}
+
+
+///
+// Print a slice of the array to a file for plotting
+///
+void print_array_slice(std::vector<complex_t> const & a, int const n[], int const nproc[], int const self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    FILE *fp = fopen("plot.in", "w");
+    if (!fp) {
+        perror("fopen");
+    }
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                if (j0 == 0 && j1 == 0) {
+                    fprintf(fp, "%d %f\n", j2, real(a[local_index]));
+                }
+                ++local_index;
+            }
+        }
+    }
+    fclose(fp);
+    fprintf(stderr, "Array slice printed to plot.in\n");
+}
+
+
+void test(MPI_Comm comm, int n[], int repetitions)
+{
+    SolverDiscrete solver(comm, n[0]);
+    std::vector<complex_t> rho;
+    std::vector<complex_t> phi;
+    std::vector<complex_t> grad_phi[3];
+    double time;
+
+    if (0 == solver.self()) {
+        fprintf(stderr, description);
+        fprintf(stderr,
+                "Array dimensions: %d X %d X %d\n",
+                n[0], n[1], n[2]);
+    }
+
+    // allocate space
+    rho.resize(solver.local_size());
+    phi.resize(solver.local_size());
+    grad_phi[0].resize(solver.local_size());
+    grad_phi[1].resize(solver.local_size());
+    grad_phi[2].resize(solver.local_size());
+
+    assign_array(rho, n, solver.nproc_3d(), solver.self_3d());
+
+    // solve
+
+    if(solver.self()==0) fprintf(stderr,"ng = %d\tnproc = %d\n",n[0],solver.nproc());
+
+    for (int i = 0; i < repetitions; ++i) {
+	if(solver.self()==0) fprintf(stderr,"iteration %d\n",i);
+
+        time = MPI_Wtime();
+        solver.forward_solve(rho);
+        time = MPI_Wtime() - time;
+	if(solver.self()==0) fprintf(stderr,"forward    %f seconds\n",time);
+
+        time = MPI_Wtime();
+        solver.backward_solve(phi);
+        time = MPI_Wtime() - time;
+	if(solver.self()==0) fprintf(stderr,"backward   %f seconds\n",time);
+
+	for (int axis = 0; axis < 3; ++axis) {
+            time = MPI_Wtime();
+            solver.backward_solve_gradient(axis, grad_phi[axis]);
+	    time = MPI_Wtime() - time;
+	    if(solver.self()==0) fprintf(stderr,"gradient %d %f seconds\n",axis,time);
+        }
+        MPI_Barrier(comm);
+
+	if(solver.self()==0) fprintf(stderr,"\n");
+    }
+
+    /*
+    // power spectrum
+    if (1) {
+        std::vector<double> power;
+        
+        solver.power_spectrum(power);
+        if (solver.self() == 0) {
+            std::cout << "Power spectrum:\n";
+            std::for_each(power.begin(), power.end(), PrintFunctor<double>());
+            std::cout << "\n";
+        }
+    }
+
+    // print a slice for plotting
+    if (0 == solver.self()) {
+        print_array_slice(phi, n, solver.nproc_3d(), solver.self_3d());
+    }
+
+    // results
+    if (0 == solver.self()) {
+        fprintf(stderr, "Results (%d repetitions):\n", repetitions);
+        fprintf(stderr, "Grid size\tNumber of processes\tTime (s)\n");
+        fprintf(stderr, "%-8d\t%-8d\t\t%8g\n", n[0], solver.nproc(), time);
+    }
+    */
+}
+
+
+void usage(const char *name)
+{
+    fprintf(stderr, "Usage: %s [-n <grid size> -r <number of repetitions> -t]\n", name);
+    fprintf(stderr, description);
+}
+
+
+///
+// process arguments
+///
+void get_options(int argc, char *argv[],
+                 int n[3],
+                 int & repetitions)
+{
+    int self;
+    
+    MPI_Comm_rank(MPI_COMM_WORLD, &self);
+
+    for (int c = 0; c != -1; c = getopt(argc, argv, "htn:r:")) {
+        errno = 0;
+        if (c == 'n') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                if (0 == self) {
+                    fprintf(stderr, "%s: %s: %s\n",
+                            argv[0], optarg, strerror(errno));
+                }
+            }
+            n[0] = n[1] = n[2] = (int) value;
+        } else if (c == 'r') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                if (0 == self) {
+                    fprintf(stderr, "%s: %s: %s\n",
+                            argv[0], optarg, strerror(errno));
+                }
+            }
+            repetitions = (int) value;
+        } else if (c == 'h') {
+            if (0 == self) {
+                usage(argv[0]);
+            }
+            MPI_Finalize();
+            exit(0);
+        } else if (c == 0) {
+            continue;
+        } else {
+            MPI_Finalize();
+            exit(1);
+        }
+    }
+}
+
+
+int main(int argc, char *argv[])
+{
+    int n[3] = { 8, 8, 8 };
+    int repetitions = 10;
+
+    MPI_Init(&argc, &argv);
+    get_options(argc, argv, n, repetitions);
+    test(MPI_COMM_WORLD, n, repetitions);
+    MPI_Finalize();
+
+    return 0;
+}

@@ -1,0 +1,105 @@
+#include <mpi.h>
+
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cerrno>
+#include <getopt.h>
+#include <stdint.h>
+#include <unistd.h>
+
+#include "solver.hpp"
+
+int const debug = 1;
+
+void do_solve(MPI_Comm comm)
+{
+    std::vector<complex_t> data;
+    int self;
+    int ng;
+
+    MPI_Comm_rank(comm, &self);
+
+    // read in density field from file
+    if (self == 0) {
+        std::fstream stream("density.dat", std::ios::in);
+        while (true) {
+            double x;
+            stream >> x;
+            if (stream.eof()) {
+                break;
+            }
+            data.push_back(x);
+        }
+        stream.close();
+        std::cerr << "data size = " << data.size() << std::endl;
+        ng = int(rint(cbrt(double(data.size()))));
+        assert(data.size() == size_t(ng * ng * ng));
+    }
+    MPI_Bcast(&ng, 1, MPI_INT, 0, comm);
+
+    // initialize solver, allocate space
+    SolverDiscrete solver(comm, ng);
+    std::vector<complex_t> rho;
+    std::vector<complex_t> tmp;
+    rho.resize(solver.local_size());
+    tmp.resize(solver.local_size());
+    if (self == 0) {
+        std::cerr << "local size = " << solver.local_size() << std::endl;
+    }
+
+    // scatter data to processes (1d distribution)
+    MPI_Scatter(&data[0], 2 * solver.local_size(), MPI_DOUBLE,
+                &tmp[0], 2 * solver.local_size(), MPI_DOUBLE,
+                0, comm);
+    data.clear();
+    if (debug > 0) {
+        std::ostringstream fname;
+        fname << "rho." << self;
+        std::fstream stream(fname.str().c_str(), std::ios::out);
+        for (size_t i = 0; i < tmp.size(); ++i) {
+            stream << real(tmp[i]) << " " << imag(tmp[i]) << "\n";
+        }
+        return;
+    }
+    if (self == 0) {
+        std::cerr << "scatter complete" << std::endl;
+    }
+    MPI_Barrier(comm);
+
+    // change to a 3d distribution
+    solver.redistribute_1_to_3(tmp, rho);
+
+    // solve for and print out force arrays
+    char label[3] = { 'x', 'y', 'z' };
+    solver.forward_solve(rho);
+    for (int axis = 0; axis < 3; ++axis) {
+        std::vector<complex_t> grad_phi;
+        grad_phi.resize(solver.local_size());
+        solver.backward_solve_gradient(axis, grad_phi);
+
+        // change to a 1d distribution and print out
+        solver.redistribute_3_to_1(grad_phi, tmp);
+        std::ostringstream fname;
+        fname << "force." << label[axis] << "." << self;
+        std::fstream stream(fname.str().c_str(), std::ios::out);
+        for (size_t i = 0; i < tmp.size(); ++i) {
+            stream << -real(tmp[i]) << " " << -imag(tmp[i]) << "\n";
+        }
+        stream.close();
+    }
+}
+
+
+int main(int argc, char *argv[])
+{
+    MPI_Init(&argc, &argv);
+    do_solve(MPI_COMM_WORLD);
+    MPI_Finalize();
+
+    return 0;
+}

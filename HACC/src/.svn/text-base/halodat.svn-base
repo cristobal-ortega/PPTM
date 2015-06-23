@@ -1,0 +1,4 @@
+0.2	# linking length
+1.0e12	# minimum mass (M_solar/h)
+10	# minimum number of particles
+5.0	# overload length (Mpc/h)

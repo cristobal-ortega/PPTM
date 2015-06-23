@@ -1,0 +1,347 @@
+#include <assert.h>
+#include <errno.h>
+#include <getopt.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "complex-type.h"
+#include <fftw3-mpi.h>
+#include "fp.h"
+#include "distribution.h"
+
+const char *description = 
+    "TEST: FFTW, 3-d data distribution, delta function\n"
+    "\n"
+    "FFTW MPI transform, combined with a 1-d <--> 3-d\n"
+    "data redistribution so that it can be applied directly\n"
+    "to problems requiring a 3-d data distribution\n"
+    "\n"
+    "This test initializes the field to a delta function centered\n"
+    "and performs forward and backward transforms, checking the\n"
+    "data is correct before and after each data redistribution\n"
+    "or transform.\n"
+    "\n";
+
+bool do_check = true;
+bool do_print = false;
+
+///
+// Floating point comparison based on number of 
+// A tolerance of 1 corresponds to a relative difference of 1 part
+// in 2^53 ~ 10^-16.
+///
+static inline bool isclose(complex_t a, complex_t b)
+{
+    int tolerance = 20;
+    return fp_complex_isclose(a, b, tolerance);
+}
+
+
+// print a distributed array by process
+void print_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    for (int p0 = 0; p0 < nproc[0]; ++p0) {
+        for (int p1 = 0; p1 < nproc[1]; ++p1) {
+            for (int p2 = 0; p2 < nproc[2]; ++p2) {
+                if (p0 == self[0] && p1 == self[1] && p2 == self[2]) {
+                    // Cartesian iteration over local data array
+                    int64_t local_index = 0;
+                    fprintf(stderr, "p = %d, %d, %d\n", p0, p1, p2);
+                    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+                        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+                            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                                fprintf(stderr, "(%f, %f) ", real(a[local_index]), imag(a[local_index]));
+                                ++local_index;
+                            }
+                            fprintf(stderr, "\n");
+                        }
+                        fprintf(stderr, "\n");
+                    }
+                }
+                MPI_Barrier(MPI_COMM_WORLD);
+            }
+        }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+
+// A delta function
+void assign_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                a[local_index] = 0.0;
+                ++local_index;
+            }
+        }
+    }
+    if (0 == self[0] && 0 == self[1] && 0 == self[2]) {
+        a[0] = 1.0;
+    }
+}
+
+
+// check that each local array element has the value of its global
+// index in the given data distribution
+void check_array_is_delta_function(double scale, complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                if (local_index == 0 && 0 == self[0] && 0 == self[1] && 0 == self[2]) {
+                    if (!isclose(a[local_index], scale)) {
+                        fprintf(stderr,
+                                "data[%d, %d, %d] = (%f, %f) -- should be (%f, 0.0)\n",
+                                j0, j1, j2,
+                                real(a[local_index]),
+                                imag(a[local_index]),
+                                scale);
+                    }
+                } else {
+                    if (!isclose(a[local_index], 0.0)) {
+                        fprintf(stderr,
+                                "data[%d, %d, %d] = (%f, %f) -- should be (0.0, 0.0)\n",
+                                j0, j1, j2,
+                                real(a[local_index]),
+                                imag(a[local_index]));
+                    }
+                }
+                ++local_index;
+            }
+        }
+    }
+}
+
+
+// check that each local array element has the value of its global
+// index in the given data distribution
+void check_array_is_constant(double value, complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                if (!isclose(a[local_index], value)) {
+                    fprintf(stderr,
+                            "data[%d, %d, %d] = (%f, %f) -- should be (%f, 0.0)\n",
+                            j0, j1, j2,
+                            real(a[local_index]),
+                            imag(a[local_index]),
+                            value);
+                    }
+                }
+                ++local_index;
+        }
+    }
+}
+
+
+void usage(const char *name)
+{
+    fprintf(stderr, "Usage: %s [-n <grid size>]\n", name);
+    fprintf(stderr, description);
+}
+
+int main(int argc, char *argv[])
+{
+    int n[3] = { 8, 8, 8 };
+    int padding[3] = { 0, 0, 0 };
+    fftw_plan plan_f;
+    fftw_plan plan_b;
+    ptrdiff_t local_size;
+    ptrdiff_t local_n0;
+    ptrdiff_t local_start0;
+    MPI_Comm comm;
+    int self;
+    int nproc;
+    complex_t *a;
+    complex_t *b;
+    distribution_t d[1];   // distribution descriptor
+    extern int errno;
+
+    // MPI initalization
+    MPI_Init(&argc, &argv);
+    MPI_Comm_dup(MPI_COMM_WORLD, &comm);
+    MPI_Comm_rank(comm, &self);
+    MPI_Comm_size(comm, &nproc);
+
+    // process arguments
+    for (int c = 0; c != -1; c = getopt(argc, argv, "hn:")) {
+        errno = 0;
+        if (c == 'n') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                if (0 == self) {
+                    fprintf(stderr, "%s: %s: %s\n",
+                            argv[0], optarg, strerror(errno));
+                }
+            }
+            n[0] = n[1] = n[2] = (int) value;
+        } else if (c == 'h') {
+            if (0 == self) {
+                usage(argv[0]);
+            }
+            MPI_Finalize();
+            exit(0);
+        } else if (c == 0) {
+            continue;
+        } else {
+            MPI_Finalize();
+            exit(1);
+        }
+    }
+    argc -= optind;
+    argv += optind;
+    if (0 == self) {
+        fprintf(stderr, description);
+        fprintf(stderr,
+                "Array dimensions: %d X %d X %d\n",
+                n[0], n[1], n[2]);
+    }
+
+    // other initialization
+    fftw_mpi_init();
+    distribution_init(comm, n, padding, d, true);
+    distribution_assert_commensurate(d);
+
+    // get local data size and allocate buffers
+    local_size = fftw_mpi_local_size_3d(n[0], n[1], n[2],
+                                        comm, &local_n0, &local_start0);
+    assert(local_n0 == (n[0] / d->process_topology_1.nproc[0]));
+
+    a = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!a) {
+        perror("malloc");
+    }
+
+    b = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!b) {
+        perror("malloc");
+    }
+
+    // create plan for forward and backward DFT's
+
+    plan_f = fftw_mpi_plan_dft_3d(n[0], n[1], n[2], a, b, comm, FFTW_FORWARD, FFTW_ESTIMATE);
+    plan_b = fftw_mpi_plan_dft_3d(n[0], n[1], n[2], b, a, comm, FFTW_BACKWARD, FFTW_ESTIMATE);
+
+    // initialize b in a 3d decomposition
+    assign_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+    if (do_check) {
+        if (0 == self) {
+            fprintf(stderr, "Checking initial 3d distribution...\n");
+        }
+        if (do_print) {
+            print_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        }
+        check_array_is_delta_function(1.0, b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        if (0 == self) {
+            fprintf(stderr, "Checking initial 3d distribution...done\n");
+        }
+    }
+    
+    // change to a 1d decomposition b --> a
+    distribution_3_to_1(b, a, d);
+
+    // check distribution
+    if (do_check) {
+        if (0 == self) {
+            fprintf(stderr, "Checking 1d distribution...\n");
+        }
+        MPI_Barrier(comm);
+        sleep(1);
+        if (do_print) {
+            print_array(b, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        }
+        check_array_is_delta_function(1.0, a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        if (0 == self) {
+            fprintf(stderr, "Checking 1d distribution...done\n");
+        }
+        sleep(2);
+        MPI_Barrier(comm);
+    }
+
+    // compute forward transform
+    fftw_execute(plan_f);  // a --> b
+    if (do_check) {
+        if (0 == self) {
+            fprintf(stderr, "Checking forward 1d distribution...\n");
+        }
+        MPI_Barrier(comm);
+        sleep(1);
+        if (do_print) {
+            print_array(b, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        }
+        check_array_is_constant(1.0, b, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        if (0 == self) {
+            fprintf(stderr, "Checking forward 1d distribution...done\n");
+        }
+        sleep(2);
+        MPI_Barrier(comm);
+    }
+
+    // compute backward transform
+    fftw_execute(plan_b);  // b --> a
+    if (do_check) {
+        if (0 == self) {
+            fprintf(stderr, "Checking backward FFT in 1d distribution...\n");
+        }
+        MPI_Barrier(comm);
+        sleep(1);
+        if (do_print) {
+            print_array(a, n, d->process_topology_1.nproc, d->process_topology_1.self);
+        }
+        check_array_is_delta_function(n[0] * n[1] * n[2], a, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        if (0 == self) {
+            fprintf(stderr, "Checking backward FFT in 1d distribution...done\n");
+        }
+        sleep(2);
+        MPI_Barrier(comm);
+    }
+    
+    // change back to 3d distribution a --> b
+    distribution_1_to_3(a, b, d);
+    if (do_check) {
+        if (0 == self) {
+            fprintf(stderr, "Checking restored 3d distribution...\n");
+        }
+        MPI_Barrier(comm);
+        sleep(1);
+        if (do_print) {
+            print_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        }
+        check_array_is_delta_function(n[0] * n[1] * n[2], b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        if (0 == self) {
+            fprintf(stderr, "Checking restored 3d distribution...done\n");
+        }
+        sleep(2);
+        MPI_Barrier(comm);
+    }
+
+    // clean up
+    //fftw_destroy_plan(plan_f);
+    //fftw_destroy_plan(plan_b);
+    fftw_free(a);
+    fftw_free(b);
+    distribution_fini(d);
+    MPI_Finalize();
+
+    return 0;
+}

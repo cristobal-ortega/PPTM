@@ -1,0 +1,840 @@
+
+\documentclass[aspectratio=169]{bredelebeamer}
+
+\usepackage{tikz}
+\usepackage[backend=bibtex]{biblatex}
+\setbeamertemplate{bibliography item}[text]
+\usepackage[font={scriptsize}]{caption}
+\usepackage{booktabs}
+\bibliography{bibliografia.bib}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\title{HACC\\}
+
+\subtitle{Hardware Accelerated Cosmology Code}
+
+
+\author{
+\textbf{PPTM - Q2 2015} \\
+Professor: Jesus Labarta \\
+Author: Cristóbal Ortega}
+%\date{\today}
+\date{June 23, 2015}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+
+
+\section{HACC}
+\subsection{HACC }
+\begin{frame}{Overview\footfullcite{HACC_paper}}
+\begin{itemize}
+
+\item Getting the N-body problem to petaflop systems
+\begin{itemize}
+	\item "The N-body problem is the problem of predicting the individual motions of a group of celestial objects interacting with each other gravitationally"
+\end{itemize}
+
+\end{itemize}
+
+\begin{columns}
+\hspace*{0.5cm}
+\column{0.6\textwidth}
+
+\begin{itemize}
+
+\item HACC uses a hybrid parallel algorithmic structure:
+\begin{itemize}
+	\item A grid-based for long/medium range (common in all these codes)
+	\item An architecture-tunable particle-based short/close-range solver
+\end{itemize}
+
+\end{itemize}
+\column{0.4\textwidth}
+\begin{figure}[h!]
+  \centering
+\includegraphics[width=0.65\textwidth, keepaspectratio=1]{"./img/introduction/hacc_force_evaluation"}
+\caption*{Green: medium/short range\\Magenta: close range}
+\end{figure}
+
+\end{columns}
+
+\begin{itemize}
+
+
+\item Coded to run in large systems: \\
+ Tested on 1,572,864 cores with 90\% parallel efficiency
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Input}
+
+Important parameters to consider:
+
+\begin{itemize}
+\item N particles alive
+\item Steps
+\item Geometry:
+	\begin{itemize}
+		\item Virtual topology of the network
+		\item D1xD2xD3
+		\item Each dimension must of the decomposition must be a deviser of the N value.
+		\item A Cartesian topology will be created based on it
+	\end{itemize}
+\end{itemize}        
+
+\end{frame}
+
+
+
+\begin{frame}{Topology}
+
+In the presentation 2 types of topologies will be analyzed:\\
+\vspace{0.5cm}
+\textbf{Distributed}
+\begin{itemize}
+	\item Per a given number of MPI processors it will be decomposed in powers of 2 across all the dimensions
+	\begin{itemize}
+		\item For 2 ranks $\rightarrow$ 2x1x1
+		\item For 4 ranks $\rightarrow$ 2x2x1
+		\item For 8 ranks $\rightarrow$ 2x2x2
+		\item For 64 ranks $\rightarrow$ 4x4x4
+		\item For 128 ranks $\rightarrow$ 8x4x4
+	\end{itemize}
+\end{itemize}
+\vspace{0.5cm}
+\textbf{Non Distributed}
+\begin{itemize}
+	\item Per a given number of MPI processors all of them will correspond to the first dimension:
+	\begin{itemize}
+		\item For 2 ranks $\rightarrow$ 2x1x1
+		\item For 4 ranks $\rightarrow$ 4x1x1
+		\item For 8 ranks $\rightarrow$ 8x1x1
+		\item For 64 ranks $\rightarrow$ 64x1x1
+		\item For 128 ranks $\rightarrow$ 128x1x1
+	\end{itemize}
+\end{itemize}
+
+
+\end{frame}
+
+
+\section{Analysis}
+
+\subsection{Basic analysis}
+\begin{frame}{Strong Scalability}
+\begin{itemize}
+	\item Shown only for testing behaviour
+	\item Will focus on the weak scalability
+	\item Execution time for 1 process: 5 hours
+\end{itemize}
+
+\begin{columns}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=6cm,height=5cm, keepaspectratio=1]{"./img/introduction/strong_scalability_speedup"}
+\end{figure}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=6cm,height=5cm, keepaspectratio=1]{"./img/introduction/strong_scalability_efficiency"}
+\end{figure}
+
+
+\end{columns}
+
+\end{frame}
+
+\begin{frame}{Strong Scalability (II)}
+\begin{itemize}
+	\item Similar behaviour
+	\item They run with 1.073.741.824 particles
+\end{itemize}
+
+\begin{columns}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=6cm,height=5cm, keepaspectratio=1]{"./img/introduction/strong_scalability_efficiency_authos"}
+\end{figure}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=6cm,height=5cm, keepaspectratio=1]{"./img/introduction/strong_scalability_efficiency"}
+\end{figure}
+
+
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{Weak Scalability}
+
+
+\begin{itemize}
+\item A little imbalance by input\\
+Problem size has to be multiple of number of processors\\
+\item For a topology 4x4x2, the problem size has to be multiple of 4$\times$4$\times$2 \linebreak 
+
+\item $\text{Performance} = \frac{ \text{Execution Time[8 MPI Rank}]}{\text{Execution Time[N MPI Ranks]} } \times \frac{ \text{Problem Size[N MPI Rank}]}{\text{Problem Size[8 MPI Ranks]} }$ 
+\end{itemize}
+
+
+\begin{columns}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/basic_analysis/performance_distributed"}
+\caption*{Performance for Distributed topologies}
+\end{figure}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/basic_analysis/performance_nonDistributed"}
+\caption*{Performance for non Distributed topologies}
+\end{figure}
+
+
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}{Weak Scalability (II)}
+
+\begin{columns}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/basic_analysis/modelFactors_distributed"}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/basic_analysis/overallEfficiency_distributed"}
+\end{figure}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/basic_analysis/modelFactors_nonDistributed"}
+\end{figure}
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/basic_analysis/overallEfficiency_nonDistributed"}
+\end{figure}
+
+
+\end{columns}
+
+\end{frame}
+
+
+
+
+\subsection{General Structure}
+\begin{frame}{Overview}
+
+\begin{columns}
+\column{0.25\textwidth}
+
+
+	\begin{itemize}
+	\item 3 Steps
+	\item 4x4x2 config
+	\item MPI Calls
+	\item Useful duration
+	\end{itemize} 
+	
+	
+\column{0.75\textwidth}
+
+\begin{figure}[h!]
+  \centering
+    \includegraphics[width=\textwidth,height=5cm,keepaspectratio]{"./img/general/useful_mpi_unbalanced"}
+\end{figure}
+
+
+\end{columns}
+
+
+\begin{alertblock}{Imbalance}
+\begin{itemize}
+\item Some process waiting in MPI to others to finalize
+\end{itemize}
+\end{alertblock}
+
+\end{frame}
+
+\begin{frame}{For different configurations}
+\begin{columns}[c]
+\column{0.1\textwidth}
+
+
+2x2x2\\
+\vspace{1.25cm}
+4x2x2\\
+\vspace{1cm}
+4x4x2\\
+\vspace{1cm}
+4x4x4\\
+\vspace{1cm}
+8x4x4
+
+
+
+
+\column{0.4\textwidth}
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/2x2x2"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/4x2x2"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/4x4x2"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/4x4x4"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/8x4x4"}
+
+
+\column{0.1\textwidth}
+
+
+8x1x1 \\
+\vspace{1.25cm}
+16x1x1\\
+\vspace{1cm}
+32x1x1\\
+\vspace{1cm}
+64x1x1\\
+\vspace{1cm}
+128x1x1\\
+
+
+\column{0.4\textwidth}
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/8x1x1"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/16x1x1"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/32x1x1"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/64x1x1"}
+
+
+\includegraphics[height=1.5cm, width=4.5cm]{"./img/general/128x1x1"}
+
+
+
+\end{columns}
+
+\end{frame}
+
+
+\subsection{Tracking}
+\begin{frame}{Notes}
+\begin{itemize}
+	\item From 8 processes up to 128
+	\item Showing distributed and non-distributed topologies
+	\begin{itemize}
+		\item Differences between number of instructions
+	\end{itemize}
+	\item \textbf{64 processes} case has a smaller input data 
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Evolution}
+\begin{columns}
+
+\column{0.5\textwidth}
+	\begin{figure}[h!]
+	\centering
+	\includegraphics<1>[width=\textwidth, keepaspectratio]{"./img/tracking/8_d"}
+	\includegraphics<2>[width=\textwidth, keepaspectratio]{"./img/tracking/16_d"}
+	\includegraphics<3>[width=\textwidth, keepaspectratio]{"./img/tracking/32_d"}
+	\includegraphics<4>[width=\textwidth, keepaspectratio]{"./img/tracking/64_d"}
+	\includegraphics<5>[width=\textwidth, keepaspectratio]{"./img/tracking/128_d"}
+
+	\caption*{
+		\only<1>{\#Instructions vs IPC, 8 ranks, 2x2x2}
+		\only<2>{\#Instructions vs IPC, 16 ranks, 4x2x2}
+		\only<3>{\#Instructions vs IPC, 32 ranks, 4x4x2}
+		\only<4>{\#Instructions vs IPC, 64 ranks, 4x4x4}
+		\only<5>{\#Instructions vs IPC, 128 ranks, 8x4x4}	
+	}
+	\end{figure}
+
+\column{0.5\textwidth}
+	\begin{figure}[h!]
+	\centering
+	\includegraphics<1>[width=\textwidth, keepaspectratio]{"./img/tracking/8_nd"}
+	\includegraphics<2>[width=\textwidth, keepaspectratio]{"./img/tracking/16_nd"}
+	\includegraphics<3>[width=\textwidth, keepaspectratio]{"./img/tracking/32_nd"}
+	\includegraphics<4>[width=\textwidth, keepaspectratio]{"./img/tracking/64_nd"}
+	\includegraphics<5>[width=\textwidth, keepaspectratio]{"./img/tracking/128_nd"}	
+	
+	\caption*{
+		\only<1>{\#Instructions vs IPC, 8 ranks, 8x1x1}
+		\only<2>{\#Instructions vs IPC, 16 ranks, 16x1x1}
+		\only<3>{\#Instructions vs IPC, 32 ranks, 32x1x1}
+		\only<4>{\#Instructions vs IPC, 64 ranks, 64x1x1}
+		\only<5>{\#Instructions vs IPC, 128 ranks, 128x1x1}	
+	}
+	\end{figure}
+
+\end{columns}
+
+\end{frame}
+
+
+
+\begin{frame}{Metrics}
+\begin{itemize}
+\item Instructions:
+	\begin{itemize}
+		\item Drop in 64 ranks by the given input, no application problem!
+		\item Very similar between ranks (most imbalance around 5-10\%)
+	\end{itemize}
+\item IPC:
+	\begin{itemize}
+		\item Region 1. Computation: IPC keeps equal
+		\item Region 2 \& 3. More imbalance if there is no distribution in the space.
+	\end{itemize}
+\end{itemize}
+\centering
+\includegraphics[width=8cm, height=4cm, keepaspectratio]{"./img/tracking/instr_all_regions"}
+
+
+\centering
+\includegraphics[width=8cm, height=4cm, keepaspectratio]{"./img/tracking/IPC_all_regions"}
+
+
+
+\end{frame}
+
+
+\subsection{One Step Structure}
+\begin{frame}{Overview}
+
+\begin{columns}[c]
+\column{0.25\textwidth}
+
+
+	\begin{itemize}
+	\item 4x4x2 config
+	\item 32 MPI Ranks
+	\end{itemize}
+	\begin{block}{Phases}
+		\begin{enumerate}						
+		\item \textcolor{yellow}{ Init}
+		\item \textcolor{Green}{Computation}
+		\item \textcolor{red}{End}
+		\end{enumerate}	
+	\end{block}
+ 
+
+
+\column{0.75\textwidth}
+
+\begin{figure}[h!]
+  \centering
+    \includegraphics[width=\textwidth,height=5cm,keepaspectratio]{"./img/one_step/phases"}
+\end{figure}
+
+\end{columns}
+\end{frame}
+
+
+\begin{frame}{Clustering}
+\includegraphics[width=\textwidth, keepaspectratio=1]{"./img/one_step/clustering"}
+
+
+\end{frame}
+
+\begin{frame}{Imbalance}
+\begin{itemize}
+
+\item Cluster of computation shows vertical line\\
+    $\rightarrow$ Difference in number of instructions\\
+\item Losing performance:
+\end{itemize}
+
+
+\begin{columns}[c]
+\column{0.33\textwidth}
+% Please add the following required packages to your document preamble:
+% \usepackage{booktabs}
+% \usepackage[table,xcdraw]{xcolor}
+% If you use beamer only pass "xcolor=table" option, i.e. \documentclass[xcolor=table]{beamer}
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+        & Outside MPI \\ \midrule
+\rowcolor[HTML]{EFEFEF} 
+Avg     & 94,85\%     \\
+Max     & 99,95\%     \\
+\rowcolor[HTML]{EFEFEF} 
+Min     & 89,07\%     \\
+Avg/Max & 0,95\%      \\ \bottomrule
+\end{tabular}
+\caption*{4x4x2}
+\label{mpi_4x4x2}
+\end{table}
+
+
+\column{0.33\textwidth}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+        & Outside MPI \\ \midrule
+\rowcolor[HTML]{EFEFEF} 
+Avg     & 92,14\%     \\
+Max     & 99,93\%     \\
+\rowcolor[HTML]{EFEFEF} 
+Min     & 86,70\%     \\
+Avg/Max & 0,95\%      \\ \bottomrule
+\end{tabular}
+\caption*{4x4x4}
+\label{mpi_4x4x4}
+\end{table}
+
+
+\column{0.33\textwidth}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+        & Outside MPI \\ \midrule
+\rowcolor[HTML]{EFEFEF} 
+Avg     & 96,46\%     \\
+Max     & 99,86\%     \\
+\rowcolor[HTML]{EFEFEF} 
+Min     & 93,80\%     \\
+Avg/Max & 0,97\%      \\ \bottomrule
+\end{tabular}
+\caption*{128x1x1}
+\label{mpi_128x1x1}
+\end{table}
+
+\end{columns}
+
+
+\end{frame}
+
+
+
+
+
+
+
+\subsection{Source of imbalance}
+\begin{frame}{IPC}
+
+\begin{itemize}
+\item Computation phase with same IPC
+\item Blue phases are the important ones, computation phase
+\end{itemize}
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=\textwidth,height=4cm,keepaspectratio]{"./img/one_step/IPC_histograma_4x4x2"}
+  \caption*{IPC Histogram}
+\end{figure}
+
+\begin{itemize}
+\item Min. IPC: 1.50
+\item Max. IPC: 1.57
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Instructions}
+
+\begin{itemize}
+\item IPC = $\frac{\#Instructions}{\#Cycles}$
+\item Blue phases are the important ones, computation phase
+\end{itemize}
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=\textwidth,height=4cm,keepaspectratio]{"./img/one_step/instructions_histograma_4x4x2"}
+  \caption*{Instructions Histogram}
+\end{figure}
+
+\begin{itemize}
+\item Min. Instructions: $7.5\times10^{12}$
+\item Max. Instructions: $8.5\times10^{12}$
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Preemption}
+
+\begin{itemize}
+\item Extra instructions come from preemption?
+\item Blue phases are the important ones, computation phase
+\end{itemize}
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=\textwidth,height=4cm,keepaspectratio]{"./img/one_step/CYCLES-US_histograma_4x4x2"}
+  \caption*{Cycles per Us Histogram}
+\end{figure}
+
+\begin{itemize}
+\item No preemption in the computing phases
+\end{itemize}
+
+\end{frame}
+
+
+
+
+\begin{frame}{Network}
+
+\begin{itemize}
+\item  Is the Network affecting the application?\\
+\end{itemize}
+
+\begin{columns}
+
+\column{0.25\textwidth}
+\begin{block}{Ideal network}
+Bandwidth: $\infty$ MB$/$s \\
+Latency: 0s \\
+\end{block}
+\end{columns}
+
+\vspace{0.2cm}
+\begin{columns}
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+  \centering
+\includegraphics[width=6cm, keepaspectratio=1]{"./img/one_step/dimemas/dimemas_4x2x2"}
+\caption*{Dimemas: ideal network execution}
+\end{figure}
+
+
+
+\column{0.5\textwidth}
+\begin{figure}[h!]
+  \centering
+\includegraphics[width=6cm, keepaspectratio=1]{"./img/one_step/dimemas/against_dimemas_4x2x2"}
+\caption*{Real execution}
+\end{figure}
+
+\end{columns}
+\end{frame}
+
+
+\subsection{Special cases}
+\begin{frame}{Why less instructions}
+
+\begin{itemize}
+\item 64 \& 128 processes
+\begin{itemize}
+	\item Same input
+	\item Different virtual topology
+	\item Less instructions
+\end{itemize}
+\item Focus on 128 processes case
+
+\end{itemize}
+
+\end{frame}
+
+
+
+\begin{frame}{Output}
+
+\begin{columns}
+
+\column{0.5\textwidth}
+
+\begin{itemize}
+\item 8x4x4
+\item[] Initial Particles 16777216 
+\begin{itemize}
+	\item 131072 particles per process
+\end{itemize}
+\item[] STEP 0: particles = 16777207
+\item[] STEP 1: particles = 16777215
+\item[] STEP 2: particles = 16777213
+\end{itemize}
+
+\column{0.5\textwidth}
+
+\begin{itemize}
+\item 128x1x1
+\item[] Initial Particles 17307773 
+
+\begin{itemize}
+	\item 135216 particles per process
+\end{itemize}
+\item[] STEP 0: particles = 17332773
+\item[] STEP 1: particles = 17363514
+\item[] STEP 2: particles = 17404656
+\end{itemize}
+
+
+\end{columns}
+
+\vspace{1cm}
+
+\begin{itemize}
+\item Size of the generated traces:
+\begin{itemize}
+	\item 8x4x4: 200 MB
+	\item 128x1x1: 1 GB
+\end{itemize}
+\end{itemize}
+
+
+\end{frame}
+
+
+\section{Conclusions}
+
+\subsection{}
+
+\begin{frame}{Conclusions}
+\begin{itemize}
+\item HACC is a bit imbalance (up to ~10\%)
+\item Seems to be cause of how the algorithm works
+	\begin{itemize}
+		\item Input points are distributed among the different process\\
+		\item There are no hardware problems\\
+	\end{itemize}
+\end{itemize}	
+
+\hspace{1cm}
+%\begin{itemize}
+%\item Possible solutions:
+%\begin{itemize}
+%	\item Try with a bigger problem $\rightarrow$ ¿better division of the problem?
+%	\item Increase number of MPI process working $\rightarrow$ ¿better distribution of the problem?
+%	\item Execute with more threads $\rightarrow$ dynamic scheduling could improve perfomance	
+%	\item Dynamic Load Balancing $\rightarrow$ assign more resources to those processes with more instructions
+%\end{itemize}
+%\end{itemize}
+
+\begin{itemize}
+\item Possible solutions:
+\begin{itemize}
+	\item Try with a bigger problem 
+	\begin{itemize}
+		\item[] $\rightarrow$ ¿better division of the problem?
+	\end{itemize}
+	
+	
+	\item Increase number of MPI process working
+	\begin{itemize}
+		\item[] $\rightarrow$ ¿better distribution of the problem?
+	\end{itemize} 
+	
+	\item Execute with more threads
+	\begin{itemize}
+		\item[]  $\rightarrow$ dynamic scheduling could improve perfomance
+	\end{itemize} 
+	
+	\item Dynamic Load Balancing 
+		\begin{itemize}
+		\item[]  $\rightarrow$ assign more resources to those processes with more instructions
+	\end{itemize} 
+\end{itemize}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Problems}
+\begin{itemize}
+\item Did not manage to get threads working $\rightarrow$ It could help to balance number of instructions
+\begin{itemize}
+	\item It seemed there was a race condition
+\end{itemize}
+\vspace{0.5cm}
+\item Spawned a lot of threads
+	\begin{itemize}
+		\item There is a nested loop with OpenMP
+		\item With only OMP\_NUM\_THREADS=X, it will create more
+		\item OMP\_THREAD\_LIMIT=1 is needed
+	\end{itemize}
+\end{itemize}
+
+
+\end{frame}
+
+
+
+
+
+\subsection{}
+\begin{frame}{References}
+
+   \begin{block}{HACC}
+      \printbibliography[heading=none]
+   \end{block}
+   
+\begin{block}{Tools}
+\begin{itemize}
+\item Perfomance tools documentation: \\http://www.bsc.es/computer-sciences/performance-tools/documentation
+
+\item Constan documentation
+
+\end{itemize}
+   \end{block}
+\end{frame}
+
+\subsection{}
+\begin{frame}{Questions}
+\centering
+
+\boitegrise{
+\centering \Large Thank you!\\ Feel free to ask\\
+\vspace{0.5cm}
+\normalsize Cristobal Ortega \small cristobal.ortega@est.fib.upc.edu
+}
+
+\end{frame}
+
+
+
+\end{document}

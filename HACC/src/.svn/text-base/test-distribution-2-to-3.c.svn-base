@@ -1,0 +1,486 @@
+#include <assert.h>
+#include <errno.h>
+#include <getopt.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include <mpi.h>
+
+#include "complex-type.h"
+#include "fp.h"
+#include "distribution.h"
+
+char *description = 
+    "TEST: 3-d data distribution, global index\n"
+    "\n"
+    "A 1-d <--> 3-d\n data redistribution intended for FFTW\n"
+    "\n"
+    "This test initializes the field to the value of its\n"
+    "global coordinate for thorough checking of the redistribution\n"
+    "functions. Checks that the data is correct are performed\n"
+    "before and after each data redistribution\n"
+    "\n";
+
+bool do_check = true;
+bool do_print = false;
+
+///
+// Compare floating point numbers based on the number of representable
+// floating point numbers between them.
+//
+// A tolerance of 1 corresponds to a relative difference of 1 part
+// in 2^53 ~ 10^-16.
+///
+static inline bool isclose(complex_t a, complex_t b)
+{
+    int tolerance = 20;
+    return fp_complex_isclose(a, b, tolerance);
+}
+
+
+///
+// print a distributed array by process
+///
+void print_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    for (int p0 = 0; p0 < nproc[0]; ++p0) {
+        for (int p1 = 0; p1 < nproc[1]; ++p1) {
+            for (int p2 = 0; p2 < nproc[2]; ++p2) {
+                if (p0 == self[0] && p1 == self[1] && p2 == self[2]) {
+                    // Cartesian iteration over local data array
+                    int64_t local_index = 0;
+                    fprintf(stderr, "p = %d, %d, %d\n", p0, p1, p2);
+                    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+                        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+                            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                                fprintf(stderr, "(%f, %f) ", real(a[local_index]), imag(a[local_index]));
+                                ++local_index;
+                            }
+                            fprintf(stderr, "\n");
+                        }
+                        fprintf(stderr, "\n");
+                    }
+                }
+                MPI_Barrier(MPI_COMM_WORLD);
+            }
+        }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+
+///
+// set each local array element to its global index in the
+// given data distribution
+///
+void assign_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                complex_t global_index = (j0 * n[1] + j1) * n[2] + j2;
+                a[local_index] = global_index;
+                assert(local_index == ((i0 * (n[1] / nproc[1]) + i1) * (n[2] / nproc[2]) + i2));
+                ++local_index;
+            }
+        }
+    }
+}
+
+
+///
+// check that each local array element has the value of its global
+// index in the given data distribution
+///
+void check_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                complex_t global_index = (j0 * n[1] + j1) * n[2] + j2;
+                if (!isclose(a[local_index], global_index)) {
+                    fprintf(stderr,
+                            "[%d, %d, %d]: data[%d, %d, %d] = (%f, %f) -- should be (%f, %f), diff = %g\n",
+                            self[0], self[1], self[2],
+                            j0, j1, j2,
+                            real(a[local_index]),
+                            imag(a[local_index]),
+                            real(global_index),
+                            imag(global_index),
+                            cabs(a[local_index] - global_index));
+                }
+                assert(local_index == ((i0 * (n[1] / nproc[1]) + i1) * (n[2] / nproc[2]) + i2));
+                ++local_index;
+            }
+        }
+    }
+   
+}
+void check_array_x(complex_t *a, int n[], int nproc[], int self[]){
+// Cartesian iteration over local data array
+     int64_t local_index = 0;
+     for (int i2 = (n[2] / nproc[2])-1; i2 >= 0; --i2) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                complex_t global_index = (j0 * n[1] + j1) * n[2] + j2;
+                
+	
+                if (!isclose(a[local_index], global_index)) {
+                    fprintf(stderr,
+                            "[%d, %d, %d]: data[%d, %d, %d] = (%f, %f) -- should be (%f, %f), diff = %g\n",
+                            self[0], self[1], self[2],
+                            j0, j1, j2,
+                            real(a[local_index]),
+                            imag(a[local_index]),
+                            real(global_index),
+                            imag(global_index),
+                            cabs(a[local_index] - global_index));
+                }
+		
+                //assert(local_index == ((i0 * (n[1] / nproc[1]) + i1) * (n[2] / nproc[2]) + i2));
+                ++local_index;
+            }
+        }
+    }
+
+}
+void check_array_y(complex_t *a, int n[], int nproc[], int self[], int me){
+// Cartesian iteration over local data array
+     int64_t local_index = 0;
+     for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+         for (int i2 = (n[2] / nproc[2])-1; i2 >= 0; --i2) {
+            for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+                int j0 = i0 + self[0] * (n[0] / nproc[0]);
+                int j1 = i1 + self[1] * (n[1] / nproc[1]);
+                int j2 = i2 + self[2] * (n[2] / nproc[2]);
+                complex_t global_index = (j0 * n[1] + j1) * n[2] + j2;
+                //if (me == 0)fprintf(stderr,"(%f,%f) ",real(global_index),imag(global_index));
+                
+		///*	
+                if (!isclose(a[local_index], global_index)) {
+ //		   fprintf(stderr,"Y IS WRONG!");
+//		    return;
+                    fprintf(stderr,
+                            "[%d, %d, %d]: data[%d, %d, %d] = (%f, %f) -- should be (%f, %f), diff = %g\n",
+                            self[0], self[1], self[2],
+                            j0, j1, j2,
+                            real(a[local_index]),
+                            imag(a[local_index]),
+                            real(global_index),
+                            imag(global_index),
+                            cabs(a[local_index] - global_index));
+                }
+		//*/
+                //assert(local_index == ((i0 * (n[1] / nproc[1]) + i1) * (n[2] / nproc[2]) + i2));
+                ++local_index;
+            }
+        }
+    }
+}
+
+
+void usage(const char *name)
+{
+    fprintf(stderr, "Usage: %s [-n <grid size>]\n", name);
+}
+void swap_vals(int x[], int i, int j){
+	int temp;
+        temp=x[i];
+        x[i]=x[j];
+        x[j]=temp;
+        return;
+}
+bool equal_arr(int x[], int y[], int size){
+    for(int i=size-1; i>=0;i--)
+       if(x[i]!=y[i])return false;
+    return true;
+}
+void swap_dims(MPI_Comm comm, distribution_t * d, int n[], int padding[], int hard_coded_values[], int self, bool his_debug){
+      int n_x_dims[3];
+      int n_y_dims[3];
+      int n_z_dims[3];
+      int n_1_dims[3];
+      int n_3_dims[3];
+    //  n_x_dims[0]=d->process_topology_2_x.nproc[0];
+    //  n_x_dims[1]=d->process_topology_2_x.nproc[2];
+    //  n_x_dims[2]=d->process_topology_2_x.nproc[1];
+
+
+      n_x_dims[0]=d->process_topology_2_x.nproc[0];
+      n_x_dims[1]=d->process_topology_2_x.nproc[1];
+      n_x_dims[2]=d->process_topology_2_x.nproc[2];
+      //n_x_dims[0]=1;
+     // n_x_dims[1]=9;
+    //  n_x_dims[2]=2;
+
+      n_y_dims[0]=d->process_topology_2_y.nproc[0];
+      n_y_dims[1]=d->process_topology_2_y.nproc[1];
+      n_y_dims[2]=d->process_topology_2_y.nproc[2];
+
+      n_z_dims[0]=d->process_topology_2_z.nproc[0];
+      n_z_dims[1]=d->process_topology_2_z.nproc[1];
+      n_z_dims[2]=d->process_topology_2_z.nproc[2];
+
+      n_1_dims[0]=d->process_topology_1.nproc[0];
+      n_1_dims[1]=d->process_topology_1.nproc[1];
+      n_1_dims[2]=d->process_topology_1.nproc[2];
+
+      n_3_dims[0]=d->process_topology_3.nproc[0];
+      n_3_dims[1]=d->process_topology_3.nproc[1];
+      n_3_dims[2]=d->process_topology_3.nproc[2];
+
+      n_3_dims[0]=hard_coded_values[0];
+      n_3_dims[1]=hard_coded_values[1];
+      n_3_dims[2]=hard_coded_values[2];
+       if(self==0)fprintf(stderr,"HARDCODING THE CUBE to (%d,%d,%d)!!!!!!!!!!!!!\n",n_3_dims[0], n_3_dims[1],n_3_dims[2]);
+
+      //MPI_Barrier(comm);
+    distribution_fini(d);
+      distribution_init_explicit(comm, n, padding,
+                                n_1_dims,
+                                n_x_dims,
+                                n_y_dims,
+                                n_z_dims,
+                                n_3_dims,
+                                d, his_debug);
+     return;
+}
+
+
+int main(int argc, char *argv[])
+{
+    int n[3] = { 8, 8, 8 };
+    int padding[3] = { 0, 0, 0 };
+    ptrdiff_t local_size;
+    MPI_Comm comm;
+    int self;
+    int me=0;
+    int z_max=2;
+    bool print_me=false;//prints debug messages
+    bool his_debug=false;//prints the original debug messages
+    bool hard_code=false;//hard codes the below values for the dimensions of every topology.
+    int hard_vals_x[3]={1,20,50};
+    int hard_vals_y[3]={20,1,50};
+    int hard_vals_z[3]={20,50,1};
+    int hard_vals_1[3]={1000,1,1};
+    int hard_cube_vals[3]={10,10,10};
+    int nproc;
+    complex_t *a;
+    complex_t *b;
+    int z=2;//pencil goes into dimension two
+
+    distribution_t d[1];     // distribution descriptor
+
+    // MPI initalization
+    MPI_Init(&argc, &argv);
+    MPI_Comm_dup(MPI_COMM_WORLD, &comm);
+    MPI_Comm_rank(comm, &self);
+    MPI_Comm_size(comm, &nproc);
+
+    // process arguments
+    for (int c = 0; c != -1; c = getopt(argc, argv, "hn:")) {
+        errno = 0;
+        if (c == 'n') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                if (0 == self) {
+                    fprintf(stderr, "%s: %s: %s\n",
+                            argv[0], optarg, strerror(errno));
+                }
+            }
+            n[0] = n[1] = n[2] = (int) value;
+        } else if (c == 'h') {
+            if (0 == self) {
+                usage(argv[0]);
+            }
+            MPI_Finalize();
+            exit(0);
+        } else if (c == 0) {
+            continue;
+        } else {
+            MPI_Finalize();
+            exit(1);
+        }
+    }
+    argc -= optind;
+    argv += optind;
+    if ((me == self) && print_me) {
+        fprintf(stderr, description);
+        fprintf(stderr,
+                "Array dimensions: %d X %d X %d\n",
+                n[0], n[1], n[2]);
+    }
+
+    // other initialization
+
+    if(!hard_code){
+    distribution_init(comm, n, padding, d, his_debug);
+    distribution_assert_commensurate(d);
+    //MPI_Barrier(comm);
+    }
+// see if need to hard code
+    if(hard_code){
+      if(self==0)fprintf(stderr,"HARD CODING DIMENSIONS!! \n");
+
+      distribution_init_explicit(comm, n, padding, 
+                                hard_vals_1,
+				hard_vals_x,
+				hard_vals_y,
+				hard_vals_z,
+ 				hard_cube_vals,
+                                d, his_debug);
+    distribution_assert_commensurate(d);
+    if(self==0)fprintf(stderr,"3_d dims (%d,%d,%d), 2d_x (%d,%d,%d), 2d_y (%d,%d,%d), 2d_z (%d,%d,%d)\n",d->process_topology_3.n[0],d->process_topology_3.n[1],d->process_topology_3.n[2],
+         d->process_topology_2_x.n[0],d->process_topology_2_x.n[1],d->process_topology_2_x.n[2],d->process_topology_2_y.n[0],d->process_topology_2_y.n[1],d->process_topology_2_y.n[2],
+         d->process_topology_2_z.n[0],d->process_topology_2_z.n[1],d->process_topology_2_z.n[2]);
+
+      //MPI_Barrier(comm);
+    }
+
+    for(int kk=z_max;kk>=0;kk--){
+    z=kk;
+    
+    if((self == me) && print_me)fprintf(stderr," I AM DOING z = %d !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",z);
+    //if((self == me) && print_me)fprintf(stderr,"MY CReATED DIMS pencil_x (%d,%d,%d),pencil_y(%d,%d,%d),pencil_z(%d,%d,%d)",d->process_topology_2_x.n[0],d->process_topology_2_x.n[1],d->process_topology_2_x.n[2],
+    //d->process_topology_2_y.n[0],d->process_topology_2_y.n[1],d->process_topology_2_y.n[2],d->process_topology_2_z.n[0],d->process_topology_2_z.n[1],d->process_topology_2_z.n[2]);
+    //MPI_Barrier(comm);
+    //return 0;
+
+    // get local data size and allocate buffers
+    local_size = d->process_topology_3.n[0] * d->process_topology_3.n[1] * d->process_topology_3.n[2];
+    a = (complex_t *) malloc(sizeof(complex_t) * local_size);
+    if (!a) {
+        perror("malloc");
+    }
+    b = (complex_t *) malloc(sizeof(complex_t) * local_size);
+    if (!b) {
+        perror("malloc");
+    }
+
+    // initialize b in a 3d decomposition
+    assign_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+    if (do_check) {
+        if (me == self) {
+            fprintf(stderr, "Checking initial 3d distribution...\n");
+        }
+        if (do_print) {
+            print_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        }
+        check_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        if (me == self) {
+            fprintf(stderr, "Checking initial 3d distribution...done\n");
+        }
+    }
+    
+    // change to a 2d decomposition b --> a
+    if (me == self) {
+        fprintf(stderr, "Redistributing 3d -> 2d...\n");
+    }
+        //MPI_Barrier(comm);
+    //return 0;
+    distribution_3_to_2(b, a, d, z);
+        //MPI_Barrier(comm);
+    if(0== self){
+//    for(int i=0; i<100; i++)
+//	fprintf(stderr,"(%f,%f) ",real(a[i]),imag(a[i]));
+    }
+  if(print_me)fprintf(stderr,"\nI am %d and I am DONE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n",self);
+    
+    //return 0;
+    if (me == self) {
+        fprintf(stderr, "Redistributing 3d -> 2d... done\n");
+    }
+
+    // check distribution
+    if (do_check) {
+        if (me == self) {
+            fprintf(stderr, "Checking 2d distribution...\n");
+        }
+        //MPI_Barrier(comm);
+        sleep(1);
+        if (do_print) {
+            print_array(a, n, d->process_topology_2_z.nproc, d->process_topology_2_z.self);
+            print_array(a, n, d->process_topology_2_y.nproc, d->process_topology_2_y.self);
+            print_array(a, n, d->process_topology_2_x.nproc, d->process_topology_2_x.self);
+        }
+	switch(z){
+	case 0:
+        check_array_x(a, n, d->process_topology_2_x.nproc, d->process_topology_2_x.self);
+       // return 0;
+	break;
+	case 1:
+        check_array_y(a, n, d->process_topology_2_y.nproc, d->process_topology_2_y.self,self);
+        //return 0;
+	break;
+	case 2:
+        //return 0;
+        check_array(a, n, d->process_topology_2_z.nproc, d->process_topology_2_z.self);
+	break;
+	}
+        if (me == self) {
+            fprintf(stderr, "Checking 2d distribution...done\n");
+        }
+    }
+
+    // change back to 3d distribution a --> b
+    if (me == self) {
+        fprintf(stderr, "Redistributing 2d -> 3d...\n");
+    }
+   // return 0;
+    distribution_2_to_3(a, b, d, z);
+    //if(0== self){
+     //   for(int i=0; i<256; i++)
+       //       fprintf(stderr,"(%f,%f) ",real(b[i]),imag(b[i]));
+   // }
+    //MPI_Barrier(comm);
+    //return 0;
+    if (me == self) {
+        fprintf(stderr, "Redistributing 2d -> 3d...done\n");
+    }
+
+    // check distribution
+    if (do_check) {
+        if (0 == self) {
+            fprintf(stderr, "Checking restored 3d distribution...\n");
+        }
+     //  MPI_Barrier(comm);
+        sleep(1);
+        if (do_print) {
+            print_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        }
+        check_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+        if (0 == self) {
+            fprintf(stderr, "Checking restored 3d distribution...done\n");
+        }
+    }
+
+    // clean up
+    free(a);
+    free(b);
+//    return 0;
+    }
+    distribution_fini(d);
+    MPI_Finalize();
+
+    return 0;
+}

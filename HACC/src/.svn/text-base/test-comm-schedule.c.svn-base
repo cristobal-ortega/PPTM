@@ -1,0 +1,71 @@
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "comm-schedule.h"
+
+int main(int argc, char *argv[])
+{
+    int *sendbuf;
+    int *recvbuf;
+    comm_schedule_t *schedule;
+    int self;
+    int nproc;
+
+    MPI_Init(0, 0);
+    MPI_Comm_rank(MPI_COMM_WORLD, &self);
+    MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+
+    // allocate buffers, initalize data
+    sendbuf = malloc(nproc * sizeof(int));
+    recvbuf = malloc(nproc * sizeof(int));
+    if (!sendbuf || !recvbuf) {
+        perror("out of memory");
+    }
+    for (int p = 0; p < nproc; ++p) {
+        sendbuf[p] = p * 100;
+        recvbuf[p] = -1;
+    }
+
+    // create communication schedule
+    schedule = 0;
+    // everyone recv into their slot
+    schedule = comm_schedule_append(schedule,
+                                    MPI_COMM_WORLD,
+                                    0,
+                                    COMM_SCHEDULE_RECV,
+                                    &recvbuf[self],
+                                    MPI_INT,
+                                    1);
+    // root sends unique data to everyone
+    if (self == 0) {
+        for (int p = 0; p < nproc; ++p) {
+            schedule = comm_schedule_append(schedule,
+                                            MPI_COMM_WORLD,
+                                            p,
+                                            COMM_SCHEDULE_SEND,
+                                            &sendbuf[p],
+                                            MPI_INT,
+                                            1);
+        }
+    }
+
+    // execute schedule and check results
+    comm_schedule_execute(schedule);
+    for (int p = 0; p < nproc; ++p) {
+        if (p == self) {
+            assert(recvbuf[p] == (p * 100));
+        } else {
+            assert(recvbuf[p] == -1);
+        }
+    }
+
+    if (self == 0) {
+        fprintf(stderr, "All done\n");
+    }
+    free(sendbuf);
+    free(recvbuf);
+    MPI_Finalize();
+
+    return 0;
+}

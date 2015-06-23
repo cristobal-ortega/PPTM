@@ -1,0 +1,213 @@
+#include <assert.h>
+#include <errno.h>
+#include <getopt.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "complex-type.h"
+#include <fftw3-mpi.h>
+#include "fp.h"
+#include "distribution.h"
+
+const char *description = 
+    "\n"
+    "TEST: FFTW, 3-d data distribution, timing\n"
+    "\n"
+    "FFTW MPI transform, combined with a 1-d <--> 3-d\n"
+    "data redistribution so that it can be applied directly\n"
+    "to problems requiring a 3-d data distribution\n"
+    "\n"
+    "This test times the combined redistribution and transform.\n"
+    "\n";
+
+bool do_transposed_order = false;
+
+// A delta function
+void assign_array(complex_t *a, int n[], int nproc[], int self[])
+{
+    // Cartesian iteration over local data array
+    int64_t local_index = 0;
+    for (int i0 = 0; i0 < (n[0] / nproc[0]); ++i0) {
+        for (int i1 = 0; i1 < (n[1] / nproc[1]); ++i1) {
+            for (int i2 = 0; i2 < (n[2] / nproc[2]); ++i2) {
+                a[local_index] = 0.0;
+                ++local_index;
+            }
+        }
+    }
+    if (0 == self[0] && 0 == self[1] && 0 == self[2]) {
+        a[0] = 1.0;
+    }
+}
+
+void usage(const char *name)
+{
+    fprintf(stderr, "Usage: %s [-n <grid size> -r <number of repetitions> -t]\n", name);
+    fprintf(stderr, description);
+}
+
+int main(int argc, char *argv[])
+{
+    int n[3] = { 8, 8, 8 };
+    int padding[3] = { 0, 0, 0 };
+    fftw_plan plan_f;
+    fftw_plan plan_b;
+    int flags_f;
+    int flags_b;
+    size_t local_size;
+    MPI_Comm comm;
+    int self;
+    int nproc;
+    int repetitions = 10;
+    complex_t *a;
+    complex_t *b;
+    double time;
+    double time_fft;
+    double time_redistribution;
+    distribution_t d[1];   // distribution descriptor
+    extern int errno;
+
+    // MPI initalization
+    MPI_Init(&argc, &argv);
+    MPI_Comm_dup(MPI_COMM_WORLD, &comm);
+    MPI_Comm_rank(comm, &self);
+    MPI_Comm_size(comm, &nproc);
+
+    // process arguments
+    for (int c = 0; c != -1; c = getopt(argc, argv, "htn:r:")) {
+        errno = 0;
+        if (c == 'n') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                if (0 == self) {
+                    fprintf(stderr, "%s: %s: %s\n",
+                            argv[0], optarg, strerror(errno));
+                }
+            }
+            n[0] = n[1] = n[2] = (int) value;
+        } else if (c == 'r') {
+            char *tail;
+            long value = strtol(optarg, &tail, 0);
+            if (errno || *tail != '\0') {
+                if (0 == self) {
+                    fprintf(stderr, "%s: %s: %s\n",
+                            argv[0], optarg, strerror(errno));
+                }
+            }
+            repetitions = (int) value;
+        } else if (c == 't') {
+            do_transposed_order = true;
+        } else if (c == 'h') {
+            if (0 == self) {
+                usage(argv[0]);
+            }
+            MPI_Finalize();
+            exit(0);
+        } else if (c == 0) {
+            continue;
+        } else {
+            MPI_Finalize();
+            exit(1);
+        }
+    }
+    argc -= optind;
+    argv += optind;
+    if (0 == self) {
+        fprintf(stderr, description);
+        fprintf(stderr,
+                "Array dimensions: %d X %d X %d\n",
+                n[0], n[1], n[2]);
+        fprintf(stderr,
+                "FFT uses transposed order: %s\n",
+                do_transposed_order ? "yes" : "no");
+    }
+
+    // other initialization
+    fftw_mpi_init();
+    distribution_init(comm, n, padding, d, true);
+    distribution_assert_commensurate(d);
+
+    // allocate buffers
+    local_size = (n[0] / d->process_topology_3.nproc[0]) * (n[1] / d->process_topology_3.nproc[1]) * (n[2] / d->process_topology_3.nproc[2]);
+    a = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!a) {
+        perror("malloc");
+    }
+    b = (complex_t *) fftw_malloc(sizeof(complex_t) * local_size);
+    if (!b) {
+        perror("malloc");
+    }
+
+    // create plan for forward and backward DFT's
+    flags_f = flags_b = FFTW_ESTIMATE;
+    if (do_transposed_order) {
+        flags_f |= FFTW_MPI_TRANSPOSED_OUT;
+        flags_b |= FFTW_MPI_TRANSPOSED_IN;
+    }
+    plan_f = fftw_mpi_plan_dft_3d(n[0], n[1], n[2], a, b, comm, FFTW_FORWARD, flags_f);
+    plan_b = fftw_mpi_plan_dft_3d(n[0], n[1], n[2], b, a, comm, FFTW_BACKWARD, flags_b);
+
+    // initialize b in a 3d decomposition
+    assign_array(b, n, d->process_topology_3.nproc, d->process_topology_3.self);
+
+    // warm up
+    for (int i = 0; i < repetitions; ++i) {
+        distribution_3_to_1(b, a, d);
+        fftw_execute(plan_f);  // a --> b
+        fftw_execute(plan_b);  // b --> a
+        distribution_1_to_3(a, b, d);
+        MPI_Barrier(comm);
+    }
+
+    // time
+    time_redistribution = MPI_Wtime();
+    for (int i = 0; i < repetitions; ++i) {
+        distribution_3_to_1(b, a, d);
+        distribution_1_to_3(a, b, d);
+        MPI_Barrier(comm);
+    }
+    time_redistribution = MPI_Wtime() - time_redistribution;
+    time_redistribution /= (2.0 * repetitions);
+
+    time_fft = MPI_Wtime();
+    for (int i = 0; i < repetitions; ++i) {
+        fftw_execute(plan_f);  // a --> b
+        fftw_execute(plan_b);  // b --> a
+        MPI_Barrier(comm);
+    }
+    time_fft = MPI_Wtime() - time_fft;
+    time_fft /= (2.0 * repetitions);
+
+    time = MPI_Wtime();
+    for (int i = 0; i < repetitions; ++i) {
+        distribution_3_to_1(b, a, d);
+        fftw_execute(plan_f);  // a --> b
+        fftw_execute(plan_b);  // b --> a
+        distribution_1_to_3(a, b, d);
+        MPI_Barrier(comm);
+    }
+    time = MPI_Wtime() - time;
+    time /= (2.0 * repetitions);
+
+    if (0 == self) {
+        fprintf(stderr, "Results (%d repetitions):\n", repetitions);
+        fprintf(stderr, "Grid size\tNumber of processes\tTime redist (s)\tTime FFTW (s)\tTime total (s)\n");
+        fprintf(stderr, "%-8d\t%-8d\t\t%8g\t%8g\t%8g\n", n[0], nproc, time_redistribution, time_fft, time);
+    }
+
+    // clean up
+    fftw_destroy_plan(plan_f);
+    fftw_destroy_plan(plan_b);
+    free(a);
+    free(b);
+    distribution_fini(d);
+    MPI_Finalize();
+
+    return 0;
+}

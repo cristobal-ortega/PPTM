@@ -1,0 +1,227 @@
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/repos/DarkUniverse/!svn/ver/455/rru2/trunk/dfft
+END
+cross.hpp
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/cross.hpp
+END
+test-comm-schedule.c
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-comm-schedule.c
+END
+test-mpi-init.c
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-mpi-init.c
+END
+cycle.h
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/cycle.h
+END
+test-timing.c
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-timing.c
+END
+active-schedule.c
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/active-schedule.c
+END
+include.mk
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/repos/DarkUniverse/!svn/ver/252/rru2/trunk/dfft/include.mk
+END
+test-distribution-fft.c
+K 25
+svn:wc:ra_dav:version-url
+V 72
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-distribution-fft.c
+END
+active-schedule.h
+K 25
+svn:wc:ra_dav:version-url
+V 66
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/active-schedule.h
+END
+test-distribution-2-to-3.c
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-distribution-2-to-3.c
+END
+solver.hpp
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/repos/DarkUniverse/!svn/ver/408/rru2/trunk/dfft/solver.hpp
+END
+distribution.hpp
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/distribution.hpp
+END
+allocator.hpp
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/allocator.hpp
+END
+comm-schedule.c
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/comm-schedule.c
+END
+dfft.hpp
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/dfft.hpp
+END
+test-solver-class.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-solver-class.cpp
+END
+comm-schedule.h
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/comm-schedule.h
+END
+test-mem.c
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-mem.c
+END
+Makefile
+K 25
+svn:wc:ra_dav:version-url
+V 57
+/repos/DarkUniverse/!svn/ver/439/rru2/trunk/dfft/Makefile
+END
+pencil.mk
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/repos/DarkUniverse/!svn/ver/455/rru2/trunk/dfft/pencil.mk
+END
+test-dfft.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-dfft.cpp
+END
+test-fftw-guru.c
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-fftw-guru.c
+END
+test-solver-bench.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-solver-bench.cpp
+END
+plot.sh
+K 25
+svn:wc:ra_dav:version-url
+V 56
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/plot.sh
+END
+fp.h
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/fp.h
+END
+test-qpm.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-qpm.cpp
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 55
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/README
+END
+distribution.c
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/distribution.c
+END
+test-active-schedule.c
+K 25
+svn:wc:ra_dav:version-url
+V 71
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-active-schedule.c
+END
+distribution.h
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/distribution.h
+END
+test-fftw-guru-mpi.c
+K 25
+svn:wc:ra_dav:version-url
+V 69
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-fftw-guru-mpi.c
+END
+test-solver.c
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-solver.c
+END
+subarray.c
+K 25
+svn:wc:ra_dav:version-url
+V 59
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/subarray.c
+END
+test-delta-function.c
+K 25
+svn:wc:ra_dav:version-url
+V 70
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-delta-function.c
+END
+complex-type.h
+K 25
+svn:wc:ra_dav:version-url
+V 63
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/complex-type.h
+END
+test-distribution.c
+K 25
+svn:wc:ra_dav:version-url
+V 68
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-distribution.c
+END
+test-zarija.cpp
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/repos/DarkUniverse/!svn/ver/216/rru2/trunk/dfft/test-zarija.cpp
+END
